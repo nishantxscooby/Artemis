@@ -30,7 +30,13 @@ class JsVulnDetectorReporter(Reporter):
                 top_level_target=get_top_level_target(task_result),
                 target=get_target_url(task_result),
                 report_type=JsVulnDetectorReporter.VULNERABLE_JS_LIBRARY,
-                additional_data={"findings": findings},
+                additional_data={
+                    "findings": findings,
+                    "severity": max(
+                        (f.get("severity", "medium") for f in findings),
+                        key=lambda s: {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(s, 0),
+                    ),
+                },
                 timestamp=task_result["created_at"],
             )
         ]

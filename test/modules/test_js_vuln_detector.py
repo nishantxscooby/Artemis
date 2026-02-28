@@ -1,5 +1,6 @@
 import unittest
 from test.base import ArtemisModuleTestCase
+from unittest.mock import patch
 
 import requests_mock as requests_mock_module
 from karton.core import Task
@@ -19,7 +20,6 @@ class TestVersionIsVulnerable(unittest.TestCase):
         self.assertTrue(_version_is_vulnerable("1.12.0", {"below": "3.5.0"}))
 
     def test_below_only_at_boundary(self) -> None:
-        # 'below' is exclusive: exactly the boundary is *not* vulnerable.
         self.assertFalse(_version_is_vulnerable("3.5.0", {"below": "3.5.0"}))
 
     def test_below_only_above_range(self) -> None:
@@ -44,7 +44,7 @@ class TestCheckLibrary(unittest.TestCase):
     def _jquery_lib(self):  # type: ignore
         import json
         from pathlib import Path
-        db_path = Path(__file__).parents[1] / "artemis" / "modules" / "data" / "jsrepository.json"
+        db_path = Path(__file__).parents[2] / "artemis" / "modules" / "data" / "jsrepository.json"
         return json.loads(db_path.read_text())["jquery"]
 
     def test_vulnerable_jquery_from_url(self) -> None:
@@ -55,14 +55,13 @@ class TestCheckLibrary(unittest.TestCase):
         self.assertEqual(result["detected_version"], "1.12.0")
         self.assertIn("CVE-2020-11022", result["cves"])
         self.assertIn("CVE-2020-11023", result["cves"])
+        self.assertEqual(result["exploit_type"], "xss")
 
     def test_safe_jquery_from_url(self) -> None:
-        # jQuery 3.7.0 has no known vulnerabilities in our DB.
         result = check_library("jquery", self._jquery_lib(), "/js/jquery-3.7.0.min.js", None)
         self.assertIsNone(result)
 
     def test_version_extracted_from_content(self) -> None:
-        # URL does not reveal version; content does.
         content = "/*! jQuery JavaScript Library v1.8.3 | ... */"
         result = check_library("jquery", self._jquery_lib(), "/js/jquery.min.js", content)
         self.assertIsNotNone(result)
@@ -73,9 +72,24 @@ class TestCheckLibrary(unittest.TestCase):
         result = check_library("jquery", self._jquery_lib(), "/js/app.js", "var foo = 1;")
         self.assertIsNone(result)
 
+    def test_severity_filtering_excludes_medium(self) -> None:
+        """With min_severity_rank=3 (high), medium-only CVEs should not be reported."""
+        result = check_library("jquery", self._jquery_lib(), "/js/jquery-1.11.5.min.js", None, min_severity_rank=3)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("CVE-2020-11022", result["cves"])
+        self.assertNotIn("CVE-2015-9251", result["cves"])
+
+    def test_severity_filtering_includes_all_at_zero(self) -> None:
+        """With min_severity_rank=0, all CVEs should be included."""
+        result = check_library("jquery", self._jquery_lib(), "/js/jquery-1.11.5.min.js", None, min_severity_rank=0)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("CVE-2020-11022", result["cves"])
+        self.assertIn("CVE-2015-9251", result["cves"])
+
 
 class JsVulnDetectorTest(ArtemisModuleTestCase):
-    # The reason for ignoring mypy error is https://github.com/CERT-Polska/karton/issues/201
     karton_class = JsVulnDetector  # type: ignore
 
     def _make_task(self, host: str = "example.com", port: int = 80) -> Task:
@@ -84,8 +98,9 @@ class JsVulnDetectorTest(ArtemisModuleTestCase):
             payload={"host": host, "port": port},
         )
 
-    def test_vulnerable_jquery_detected(self) -> None:
-        """A page loading jQuery 1.12.0 must be reported as INTERESTING."""
+    @patch("artemis.modules.js_vuln_detector._min_severity_rank", return_value=3)
+    def test_vulnerable_jquery_detected(self, _mock_sev) -> None:
+        """A page loading jQuery 1.12.0 must be reported as INTERESTING (XSS CVEs are high severity)."""
         html = (
             b"<!DOCTYPE html><html><head>"
             b'<script src="/js/jquery-1.12.0.min.js"></script>'
@@ -108,8 +123,10 @@ class JsVulnDetectorTest(ArtemisModuleTestCase):
         self.assertEqual(findings[0]["library"], "jquery")
         self.assertEqual(findings[0]["detected_version"], "1.12.0")
         self.assertIn("CVE-2020-11022", findings[0]["cves"])
+        self.assertEqual(findings[0]["exploit_type"], "xss")
 
-    def test_safe_jquery_not_reported(self) -> None:
+    @patch("artemis.modules.js_vuln_detector._min_severity_rank", return_value=3)
+    def test_safe_jquery_not_reported(self, _mock_sev) -> None:
         """A page loading a safe jQuery version must be reported as OK."""
         html = (
             b"<!DOCTYPE html><html><head>"
@@ -130,7 +147,8 @@ class JsVulnDetectorTest(ArtemisModuleTestCase):
         self.assertEqual(call.kwargs["status"], TaskStatus.OK)
         self.assertEqual(call.kwargs["data"]["findings"], [])
 
-    def test_no_scripts_ok(self) -> None:
+    @patch("artemis.modules.js_vuln_detector._min_severity_rank", return_value=3)
+    def test_no_scripts_ok(self, _mock_sev) -> None:
         """A page with no <script src> tags must be reported as OK."""
         html = b"<!DOCTYPE html><html><head></head><body><p>Hello</p></body></html>"
         with requests_mock_module.Mocker() as m:
@@ -142,7 +160,8 @@ class JsVulnDetectorTest(ArtemisModuleTestCase):
         self.assertEqual(call.kwargs["status"], TaskStatus.OK)
         self.assertEqual(call.kwargs["data"]["findings"], [])
 
-    def test_non_html_response_ok(self) -> None:
+    @patch("artemis.modules.js_vuln_detector._min_severity_rank", return_value=3)
+    def test_non_html_response_ok(self, _mock_sev) -> None:
         """A non-HTML endpoint (e.g. a JSON API) must be reported as OK."""
         with requests_mock_module.Mocker() as m:
             m.get(
@@ -156,7 +175,8 @@ class JsVulnDetectorTest(ArtemisModuleTestCase):
         (call,) = self.mock_db.save_task_result.call_args_list
         self.assertEqual(call.kwargs["status"], TaskStatus.OK)
 
-    def test_multiple_vulnerable_libraries(self) -> None:
+    @patch("artemis.modules.js_vuln_detector._min_severity_rank", return_value=3)
+    def test_multiple_vulnerable_libraries(self, _mock_sev) -> None:
         """Both vulnerable jQuery and Bootstrap on the same page must be detected."""
         html = (
             b"<!DOCTYPE html><html><head>"
@@ -184,3 +204,29 @@ class JsVulnDetectorTest(ArtemisModuleTestCase):
         libs = {f["library"] for f in call.kwargs["data"]["findings"]}
         self.assertIn("jquery", libs)
         self.assertIn("bootstrap", libs)
+
+    @patch("artemis.modules.js_vuln_detector._min_severity_rank", return_value=3)
+    def test_medium_severity_filtered_out_by_default(self, _mock_sev) -> None:
+        """With high severity threshold, jQuery 1.11.5 should only show high-severity XSS CVEs."""
+        html = (
+            b"<!DOCTYPE html><html><head>"
+            b'<script src="/js/jquery-1.11.5.min.js"></script>'
+            b"</head><body></body></html>"
+        )
+        with requests_mock_module.Mocker() as m:
+            m.get("http://example.com:80", content_type="text/html", content=html)
+            m.get(
+                "http://example.com:80/js/jquery-1.11.5.min.js",
+                text="/*! jQuery JavaScript Library v1.11.5 */",
+                headers={"content-type": "application/javascript"},
+            )
+            self.mock_db.reset_mock()
+            self.run_task(self._make_task())
+
+        (call,) = self.mock_db.save_task_result.call_args_list
+        self.assertEqual(call.kwargs["status"], TaskStatus.INTERESTING)
+        findings = call.kwargs["data"]["findings"]
+        self.assertEqual(len(findings), 1)
+        all_cves = findings[0]["cves"]
+        self.assertIn("CVE-2020-11022", all_cves)
+        self.assertNotIn("CVE-2015-9251", all_cves)

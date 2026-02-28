@@ -19,21 +19,28 @@
     },
     "vulnerabilities": [
       {
-        "below": "1.9.0",
-        "severity": "medium",
+        "below": "3.5.0",
+        "severity": "high",
+        "exploit_type": "xss",
+        "exploitability_note": "Passing untrusted HTML to .html(), .append(), or similar jQuery DOM-manipulation methods allows XSS via crafted <option>, <style>, or <xmp> tags. This is a very common usage pattern in web applications. See https://github.com/nicedreams/CVE-2020-11022-simple-poc",
         "identifiers": {
           "CVE": [
-            "CVE-2011-4969"
+            "CVE-2020-11022",
+            "CVE-2020-11023"
           ]
         },
         "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2011-4969"
+          "https://blog.jquery.com/2020/04/10/jquery-3-5-0-released/",
+          "https://nvd.nist.gov/vuln/detail/CVE-2020-11022",
+          "https://nvd.nist.gov/vuln/detail/CVE-2020-11023"
         ]
       },
       {
         "below": "1.12.0",
         "atOrAbove": "1.11.1",
         "severity": "medium",
+        "exploit_type": "xss",
+        "exploitability_note": "Cross-domain AJAX responses processed without safe Content-Type can trigger XSS. Requires the application to make cross-origin $.ajax() requests.",
         "identifiers": {
           "CVE": [
             "CVE-2015-9251"
@@ -44,29 +51,17 @@
         ]
       },
       {
-        "below": "3.4.0",
-        "atOrAbove": "1.0.3",
+        "below": "1.9.0",
         "severity": "medium",
+        "exploit_type": "xss",
+        "exploitability_note": "Selector strings containing user-controlled location.hash values can lead to XSS. Common in older single-page applications using hash-based routing.",
         "identifiers": {
           "CVE": [
-            "CVE-2019-11358"
+            "CVE-2011-4969"
           ]
         },
         "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2019-11358"
-        ]
-      },
-      {
-        "below": "3.5.0",
-        "severity": "medium",
-        "identifiers": {
-          "CVE": [
-            "CVE-2020-11022",
-            "CVE-2020-11023"
-          ]
-        },
-        "info": [
-          "https://blog.jquery.com/2020/04/10/jquery-3-5-0-released/"
+          "https://nvd.nist.gov/vuln/detail/CVE-2011-4969"
         ]
       }
     ]
@@ -92,7 +87,9 @@
       {
         "below": "3.4.0",
         "atOrAbove": "3.0.0",
-        "severity": "medium",
+        "severity": "high",
+        "exploit_type": "xss",
+        "exploitability_note": "XSS via data-target attribute in collapse plugin (CVE-2018-14041) and data-container attribute in tooltip/popover (CVE-2018-14042). Exploitable when user input is reflected in HTML attributes of Bootstrap-enhanced elements.",
         "identifiers": {
           "CVE": [
             "CVE-2018-14041",
@@ -100,13 +97,16 @@
           ]
         },
         "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2018-14041"
+          "https://nvd.nist.gov/vuln/detail/CVE-2018-14041",
+          "https://nvd.nist.gov/vuln/detail/CVE-2018-14042"
         ]
       },
       {
         "below": "4.3.1",
         "atOrAbove": "4.0.0",
-        "severity": "medium",
+        "severity": "high",
+        "exploit_type": "xss",
+        "exploitability_note": "Tooltip/popover whiteList sanitizer bypass allows XSS when user-controlled data is rendered in tooltip or popover content.",
         "identifiers": {
           "CVE": [
             "CVE-2019-8331"
@@ -119,7 +119,9 @@
       {
         "below": "3.4.1",
         "atOrAbove": "3.0.0",
-        "severity": "medium",
+        "severity": "high",
+        "exploit_type": "xss",
+        "exploitability_note": "Tooltip/popover whiteList sanitizer bypass allows XSS when user-controlled data is rendered in tooltip or popover content.",
         "identifiers": {
           "CVE": [
             "CVE-2019-8331"
@@ -127,76 +129,6 @@
         },
         "info": [
           "https://nvd.nist.gov/vuln/detail/CVE-2019-8331"
-        ]
-      }
-    ]
-  },
-  "lodash": {
-    "bowername": [
-      "lodash"
-    ],
-    "extractors": {
-      "filename": [
-        "lodash[._-]([0-9]+(?:\\.[0-9]+)+)"
-      ],
-      "filecontent": [
-        "lodash\\s+([0-9][0-9.a-zA-Z_\\-]*)",
-        "@license Lodash <https://lodash.com/>\\s+Copyright.*?\\s+<https://lodash.com/>\\s+Released under.*?\\s+([0-9][0-9.a-zA-Z_\\-]*)"
-      ],
-      "uri": [
-        "lodash[._-]([0-9]+(?:\\.[0-9]+)+)"
-      ],
-      "hashes": {}
-    },
-    "vulnerabilities": [
-      {
-        "below": "4.17.21",
-        "severity": "high",
-        "identifiers": {
-          "CVE": [
-            "CVE-2021-23337",
-            "CVE-2020-28500"
-          ]
-        },
-        "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2021-23337"
-        ]
-      },
-      {
-        "below": "4.17.19",
-        "severity": "high",
-        "identifiers": {
-          "CVE": [
-            "CVE-2020-8203"
-          ]
-        },
-        "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2020-8203"
-        ]
-      },
-      {
-        "below": "4.17.12",
-        "severity": "high",
-        "identifiers": {
-          "CVE": [
-            "CVE-2019-10744"
-          ]
-        },
-        "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2019-10744"
-        ]
-      },
-      {
-        "below": "4.17.11",
-        "severity": "high",
-        "identifiers": {
-          "CVE": [
-            "CVE-2018-3721",
-            "CVE-2019-1010266"
-          ]
-        },
-        "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2018-3721"
         ]
       }
     ]
@@ -223,6 +155,8 @@
       {
         "below": "1.6.0",
         "severity": "high",
+        "exploit_type": "xss",
+        "exploitability_note": "AngularJS expression sandbox escape. Any application using AngularJS <1.6 that evaluates user-controlled expressions (e.g. via ng-bind or URL parameters reflected into ng-app scope) is vulnerable to arbitrary JavaScript execution.",
         "identifiers": {
           "CVE": [
             "CVE-2016-9879"
@@ -235,6 +169,8 @@
       {
         "below": "1.8.0",
         "severity": "medium",
+        "exploit_type": "xss",
+        "exploitability_note": "XSS via $sanitize service bypass. Exploitable when the application uses ng-bind-html with user-controlled content.",
         "identifiers": {
           "CVE": [
             "CVE-2020-7676"
@@ -242,94 +178,6 @@
         },
         "info": [
           "https://nvd.nist.gov/vuln/detail/CVE-2020-7676"
-        ]
-      }
-    ]
-  },
-  "moment.js": {
-    "bowername": [
-      "moment"
-    ],
-    "extractors": {
-      "filename": [
-        "moment[._-]([0-9]+(?:\\.[0-9]+)+)"
-      ],
-      "filecontent": [
-        "moment\\.version\\s*=\\s*['\"]([0-9][0-9.a-zA-Z_\\-]*)['\"]",
-        "\\/\\*!\\s+moment\\.js\\s+version\\s*:\\s*([0-9][0-9.a-zA-Z_\\-]*)"
-      ],
-      "uri": [
-        "moment[._-]([0-9]+(?:\\.[0-9]+)+)"
-      ],
-      "hashes": {}
-    },
-    "vulnerabilities": [
-      {
-        "below": "2.29.2",
-        "severity": "high",
-        "identifiers": {
-          "CVE": [
-            "CVE-2022-24785"
-          ]
-        },
-        "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2022-24785"
-        ]
-      },
-      {
-        "below": "2.29.4",
-        "severity": "high",
-        "identifiers": {
-          "CVE": [
-            "CVE-2022-31129"
-          ]
-        },
-        "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2022-31129"
-        ]
-      },
-      {
-        "below": "2.19.3",
-        "severity": "high",
-        "identifiers": {
-          "CVE": [
-            "CVE-2017-18214"
-          ]
-        },
-        "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2017-18214"
-        ]
-      }
-    ]
-  },
-  "underscore.js": {
-    "bowername": [
-      "underscore"
-    ],
-    "extractors": {
-      "filename": [
-        "underscore[._-]([0-9]+(?:\\.[0-9]+)+)"
-      ],
-      "filecontent": [
-        "\\/\\/ Underscore\\.js\\s+([0-9][0-9.a-zA-Z_\\-]*)"
-      ],
-      "uri": [
-        "underscore[._-]([0-9]+(?:\\.[0-9]+)+)"
-      ],
-      "hashes": {}
-    },
-    "vulnerabilities": [
-      {
-        "below": "1.12.1",
-        "atOrAbove": "1.3.2",
-        "severity": "high",
-        "identifiers": {
-          "CVE": [
-            "CVE-2021-23358"
-          ]
-        },
-        "info": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2021-23358"
         ]
       }
     ]

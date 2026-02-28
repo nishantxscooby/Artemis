@@ -1,11 +1,30 @@
 #!/usr/bin/env python3
 """
 JsVulnDetector – Artemis module that detects vulnerable client-side JavaScript
-libraries using the Retire.js vulnerability database.
+libraries using a curated subset of the Retire.js vulnerability database.
 
-Scope: only external scripts referenced via ``<script src="...">``.  Inline
-scripts are intentionally excluded to keep the module fast and avoid false
-positives from minified/transpiled bundles.
+The database is restricted to **XSS vulnerabilities** that are commonly
+exploitable when the affected library is loaded on a page.  Vulnerability
+classes that require very specific (and rare) application-level usage patterns
+— such as prototype pollution, ReDoS, or server-side path traversal — are
+excluded to minimise false positives.
+
+Each vulnerability entry in ``jsrepository.json`` carries an
+``exploitability_note`` field that documents *why* it is included and under
+what conditions it is exploitable.
+
+Scope
+-----
+Only external scripts referenced via ``<script src="...">``.  Inline scripts
+are intentionally excluded to keep the module fast and avoid false positives
+from minified / transpiled bundles.
+
+Severity filtering
+------------------
+The ``JS_VULN_DETECTOR_MIN_SEVERITY`` configuration option (default: ``high``)
+controls the minimum severity level that will be reported.  With the default,
+only high-severity XSS vulnerabilities with well-documented, frequently
+exploitable attack vectors are surfaced.
 
 Per-page limits
 ---------------
@@ -18,7 +37,7 @@ import json
 import re
 import urllib.parse
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import bs4
 from karton.core import Task
@@ -26,27 +45,29 @@ from packaging.version import InvalidVersion, Version
 
 from artemis import load_risk_class
 from artemis.binds import Service, TaskStatus, TaskType
+from artemis.config import Config
 from artemis.module_base import ArtemisBase
 from artemis.task_utils import get_target_url
-
-# --------------------------------------------------------------------------- #
-#  Tunables
-# --------------------------------------------------------------------------- #
 
 MAX_SCRIPTS_PER_PAGE = 25
 MAX_SCRIPT_CONTENT_BYTES = 256 * 1024  # 256 KB
 
 DB_PATH = Path(__file__).parent / "data" / "jsrepository.json"
 
-
-# --------------------------------------------------------------------------- #
-#  Database helpers
-# --------------------------------------------------------------------------- #
+_SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
 
 def _load_db() -> Dict[str, Any]:
     with open(DB_PATH, encoding="utf-8") as fh:
         return json.load(fh)
+
+
+def _severity_rank(s: str) -> int:
+    return _SEVERITY_RANK.get(s.lower(), 0)
+
+
+def _min_severity_rank() -> int:
+    return _severity_rank(Config.Modules.JsVulnDetector.JS_VULN_DETECTOR_MIN_SEVERITY)
 
 
 def _extract_version(text: str, patterns: List[str]) -> Optional[str]:
@@ -71,7 +92,6 @@ def _version_is_vulnerable(version_str: str, vuln_entry: Dict[str, Any]) -> bool
     try:
         version = Version(version_str)
     except InvalidVersion:
-        # Non-PEP-440 version string – we cannot compare it safely.
         return False
 
     at_or_above = vuln_entry.get("atOrAbove")
@@ -94,20 +114,18 @@ def _version_is_vulnerable(version_str: str, vuln_entry: Dict[str, Any]) -> bool
     return True
 
 
-def _SEVERITY_RANK(s: str) -> int:
-    return {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(s.lower(), 0)
-
-
 def check_library(
     lib_name: str,
     lib_info: Dict[str, Any],
     script_url: str,
     script_content: Optional[str],
+    min_severity_rank: int = 0,
 ) -> Optional[Dict[str, Any]]:
     """
     Try to detect *lib_name* in the given script and, if a known-vulnerable
     version is found, return a finding dictionary.  Returns *None* when no
-    vulnerability is detected.
+    vulnerability is detected or all matching vulnerabilities are below the
+    minimum severity threshold.
 
     The URL path (``script_url``) is always tried first so that fetching the
     script content can be skipped for the common case where the version appears
@@ -115,23 +133,22 @@ def check_library(
     """
     extractors = lib_info.get("extractors", {})
 
-    # 1. Try URL / filename patterns (no extra HTTP request).
     detected_version: Optional[str] = None
     for key in ("filename", "uri"):
         detected_version = _extract_version(script_url, extractors.get(key, []))
         if detected_version:
             break
 
-    # 2. Fall back to file-content patterns when needed.
     if not detected_version and script_content is not None:
         detected_version = _extract_version(script_content, extractors.get("filecontent", []))
 
     if not detected_version:
         return None
 
-    # 3. Check detected version against every vulnerability entry.
     matching: List[Dict[str, Any]] = [
-        v for v in lib_info.get("vulnerabilities", []) if _version_is_vulnerable(detected_version, v)
+        v
+        for v in lib_info.get("vulnerabilities", [])
+        if _version_is_vulnerable(detected_version, v) and _severity_rank(v.get("severity", "unknown")) >= min_severity_rank
     ]
     if not matching:
         return None
@@ -139,13 +156,16 @@ def check_library(
     cves: List[str] = []
     severities: List[str] = []
     info_urls: List[str] = []
+    exploit_types: List[str] = []
     for vuln in matching:
         ids = vuln.get("identifiers", {})
         cves.extend(ids.get("CVE", []))
         severities.append(vuln.get("severity", "unknown"))
         info_urls.extend(vuln.get("info", []))
+        if vuln.get("exploit_type"):
+            exploit_types.append(vuln["exploit_type"])
 
-    worst_severity = max(severities, key=_SEVERITY_RANK) if severities else "unknown"
+    worst_severity = max(severities, key=_severity_rank) if severities else "unknown"
 
     return {
         "library": lib_name,
@@ -153,25 +173,30 @@ def check_library(
         "script_url": script_url,
         "cves": sorted(set(cves)),
         "severity": worst_severity,
-        "info_urls": list(dict.fromkeys(info_urls)),  # deduplicated, preserving order
+        "exploit_type": sorted(set(exploit_types))[0] if exploit_types else "unknown",
+        "info_urls": list(dict.fromkeys(info_urls)),
     }
-
-
-# --------------------------------------------------------------------------- #
-#  Module class
-# --------------------------------------------------------------------------- #
 
 
 @load_risk_class.load_risk_class(load_risk_class.LoadRiskClass.LOW)
 class JsVulnDetector(ArtemisBase):
     """
     Detects vulnerable client-side JavaScript libraries (e.g. jQuery, Bootstrap,
-    Lodash) loaded via ``<script src="...">``, using the Retire.js vulnerability
-    database bundled at ``artemis/modules/data/jsrepository.json``.
+    AngularJS) loaded via ``<script src="...">``, using a curated subset of the
+    Retire.js vulnerability database focused on XSS vulnerabilities that are
+    commonly exploitable.
 
-    For each detected library, the module reports the library name, the detected
-    version, associated CVE identifiers, the script URL, and remediation guidance
-    (upgrade to the latest stable release).
+    The database is restricted to vulnerability classes where the presence of
+    an outdated library version creates a realistic, exploitable risk — primarily
+    XSS via DOM manipulation, sanitizer bypasses, or expression injection.
+
+    Vulnerabilities that require rare application-level usage patterns (prototype
+    pollution, ReDoS, server-side path traversal) are excluded.  Each database
+    entry includes an ``exploitability_note`` documenting the attack vector and
+    conditions under which it is exploitable.
+
+    Results are further filtered by the ``JS_VULN_DETECTOR_MIN_SEVERITY``
+    setting (default: ``high``).
     """
 
     identity = "js_vuln_detector"
@@ -182,10 +207,6 @@ class JsVulnDetector(ArtemisBase):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._db: Dict[str, Any] = _load_db()
-
-    # ---------------------------------------------------------------------- #
-    #  Internal helpers
-    # ---------------------------------------------------------------------- #
 
     def _fetch_script(self, script_url: str) -> Optional[str]:
         """
@@ -200,7 +221,6 @@ class JsVulnDetector(ArtemisBase):
             if response.status_code != 200:
                 return None
             content_type = response.headers.get("content-type", "")
-            # Accept application/javascript, text/javascript, text/plain, etc.
             if "html" in content_type.lower():
                 return None
             return response.content
@@ -208,14 +228,10 @@ class JsVulnDetector(ArtemisBase):
             self.log.debug("Could not fetch script %s: %s", script_url, exc)
             return None
 
-    # ---------------------------------------------------------------------- #
-    #  Karton task handler
-    # ---------------------------------------------------------------------- #
-
     def run(self, current_task: Task) -> None:
         url = get_target_url(current_task)
+        min_sev = _min_severity_rank()
 
-        # Fetch the target page -------------------------------------------- #
         try:
             page_response = self.http_get(url)
         except Exception as exc:
@@ -239,7 +255,6 @@ class JsVulnDetector(ArtemisBase):
 
         content_type = page_response.headers.get("content-type", "")
         if "html" not in content_type.lower():
-            # Not an HTML page – nothing to scan.
             self.db.save_task_result(
                 task=current_task,
                 status=TaskStatus.OK,
@@ -248,7 +263,6 @@ class JsVulnDetector(ArtemisBase):
             )
             return
 
-        # Parse HTML and extract <script src="…"> --------------------------- #
         soup = bs4.BeautifulSoup(page_response.content_bytes, "html.parser")
         script_tags = soup.find_all("script", src=True)
 
@@ -261,41 +275,32 @@ class JsVulnDetector(ArtemisBase):
                 continue
 
             script_url = urllib.parse.urljoin(url, src)
-            # Use only the URL path for pattern matching (avoids false positives
-            # from query-string parameters).
             url_path = urllib.parse.urlparse(script_url).path.lower()
 
-            # Lazily fetched script content (at most once per script).
             script_content: Optional[str] = None
             content_fetched = False
             scripts_checked += 1
 
             for lib_name, lib_info in self._db.items():
-                # Quick pre-check: does the URL path look related to this lib?
-                # We try URL-only first to avoid an unnecessary HTTP request.
-                finding = check_library(lib_name, lib_info, url_path, script_content)
+                finding = check_library(lib_name, lib_info, url_path, script_content, min_sev)
 
                 if finding is None and not content_fetched:
-                    # Fetch the script content and retry.
                     script_content = self._fetch_script(script_url)
                     content_fetched = True
-                    finding = check_library(lib_name, lib_info, url_path, script_content)
+                    finding = check_library(lib_name, lib_info, url_path, script_content, min_sev)
 
                 if finding is not None:
-                    # Record the full resolved URL for reporting.
                     finding["script_url"] = script_url
                     findings.append(finding)
-                    # One library per script is the common case; keep scanning
-                    # others in case multiple libs are bundled.
 
-        # Build result ------------------------------------------------------- #
         if findings:
             messages = []
             for f in findings:
                 cve_str = ", ".join(f["cves"]) if f["cves"] else "no CVE listed"
                 messages.append(
                     f"{f['library']} {f['detected_version']} "
-                    f"loaded from {f['script_url']} is vulnerable ({cve_str}). "
+                    f"loaded from {f['script_url']} has known {f['exploit_type'].upper()} "
+                    f"vulnerabilities ({cve_str}). "
                     f"Please upgrade to the latest stable version."
                 )
             status = TaskStatus.INTERESTING
