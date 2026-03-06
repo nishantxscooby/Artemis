@@ -298,7 +298,7 @@ class Config:
             "Artemis modules that are disabled by default (but may easily be enabled in the UI)",
         ] = get_config(
             "MODULES_DISABLED_BY_DEFAULT",
-            default="admin_panel_login_bruter,api_scanner,dangling_dns_detector,example,humble,ssh_bruter,xss_scanner",
+            default="admin_panel_login_bruter,api_scanner,dangling_dns_detector,example,humble,js_vuln_detector,ssh_bruter,xss_scanner",
             cast=decouple.Csv(str, delimiter=","),
         )
 
@@ -390,6 +390,16 @@ class Config:
                 default=",".join(["Content-Security-Policy", "Strict-Transport-Security", "X-Content-Type-Options"]),
                 cast=decouple.Csv(str, delimiter=","),
             )
+
+        class JsVulnDetector:
+            JS_VULN_DETECTOR_MIN_SEVERITY: Annotated[
+                str,
+                "The minimum severity for a vulnerable JS library to be reported. "
+                "Only vulnerabilities at or above this level will produce findings. "
+                "Options: high (only high/critical XSS — default, low false-positive rate), "
+                "medium (includes medium-severity XSS that requires specific usage patterns), "
+                "low (all known vulnerabilities).",
+            ] = get_config("JS_VULN_DETECTOR_MIN_SEVERITY", default="high")
 
         class Nuclei:
             NUCLEI_TEMPLATE_LISTS: Annotated[

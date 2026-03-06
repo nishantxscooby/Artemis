@@ -1,0 +1,15 @@
+#: artemis/reporting/modules/js_vuln_detector/template_vulnerable_js_library.jinja2:2
+msgid "We identified JavaScript libraries with known XSS vulnerabilities loaded by the page:"
+msgstr "Wykryliśmy biblioteki JavaScript ze znanymi podatnościami XSS ładowane przez stronę:"
+
+#: artemis/reporting/modules/js_vuln_detector/template_vulnerable_js_library.jinja2:14
+msgid ""
+"These JavaScript libraries have known cross-site scripting (XSS) vulnerabilities "
+"that can be exploited when the page processes user-controlled input through the "
+"library's DOM manipulation or sanitization functions. Please upgrade each affected "
+"library to the latest stable release."
+msgstr ""
+"Te biblioteki JavaScript mają znane podatności typu cross-site scripting (XSS), "
+"które mogą być wykorzystane, gdy strona przetwarza dane kontrolowane przez "
+"użytkownika za pomocą funkcji manipulacji DOM lub sanityzacji biblioteki. "
+"Prosimy o aktualizację każdej podatnej biblioteki do najnowszej stabilnej wersji."

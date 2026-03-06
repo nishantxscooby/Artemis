@@ -79,6 +79,7 @@ SEVERITY_MAP = {
     ReportType("bad_certificate_names"): Severity.LOW,
     ReportType("no_https_redirect"): Severity.LOW,
     ReportType("api_vulnerability"): Severity.MEDIUM,
+    ReportType("vulnerable_js_library"): Severity.MEDIUM,
     ReportType(
         "dangling_dns_record"
     ): Severity.MEDIUM,  # High if it's not a FP, but there is a significant percentage of unexploitable reports
@@ -91,17 +92,23 @@ if Config.Reporting.ADDITIONAL_SEVERITY_FILE:
         SEVERITY_MAP[ReportType(report_type_str)] = Severity(severity)
 
 
-def get_severity(report: Any) -> Severity:
-    if report.report_type == ReportType("nuclei_vulnerability") and "severity" in report.additional_data:
-        nuclei_severity_map = {
-            "info": Severity.LOW,
-            "low": Severity.LOW,
-            "medium": Severity.MEDIUM,
-            "unknown": Severity.MEDIUM,
-            "high": Severity.HIGH,
-            "critical": Severity.HIGH,
-        }
+_DYNAMIC_SEVERITY_MAP = {
+    "info": Severity.LOW,
+    "low": Severity.LOW,
+    "medium": Severity.MEDIUM,
+    "unknown": Severity.MEDIUM,
+    "high": Severity.HIGH,
+    "critical": Severity.HIGH,
+}
 
-        return nuclei_severity_map[report.additional_data["severity"]]
+_REPORT_TYPES_WITH_DYNAMIC_SEVERITY = {
+    ReportType("nuclei_vulnerability"),
+    ReportType("vulnerable_js_library"),
+}
+
+
+def get_severity(report: Any) -> Severity:
+    if report.report_type in _REPORT_TYPES_WITH_DYNAMIC_SEVERITY and "severity" in report.additional_data:
+        return _DYNAMIC_SEVERITY_MAP.get(report.additional_data["severity"], Severity.MEDIUM)
     else:
         return SEVERITY_MAP[report.report_type]
